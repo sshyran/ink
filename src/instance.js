@@ -4,6 +4,7 @@ import autoBind from 'auto-bind';
 import logUpdate from 'log-update';
 import isCI from 'is-ci';
 import signalExit from 'signal-exit';
+import ansiEscapes from 'ansi-escapes';
 import reconciler from './reconciler';
 import createRenderer from './renderer';
 import {createNode} from './dom';
@@ -54,40 +55,46 @@ export default class Instance {
 			return;
 		}
 
-		const {output, staticOutput} = this.renderer(this.rootNode);
+		const {output, outputRows, staticOutput} = this.renderer(this.rootNode);
+		const {stdin, stdout, debug} = this.options;
 
 		// If <Static> output isn't empty, it means new children have been added to it
 		const hasStaticOutput = staticOutput && staticOutput !== '\n';
 
-		if (this.options.debug) {
+		if (isCI) {
 			if (hasStaticOutput) {
-				this.fullStaticOutput += staticOutput;
-			}
-
-			this.options.stdout.write(this.fullStaticOutput + output);
-			return;
-		}
-
-		// To ensure static output is cleanly rendered before main output, clear main output first
-		if (hasStaticOutput) {
-			if (!isCI) {
-				this.log.clear();
-			}
-
-			this.options.stdout.write(staticOutput);
-
-			if (!isCI) {
-				this.log(output);
-			}
-		}
-
-		if (output !== this.lastOutput) {
-			if (!isCI) {
-				this.throttledLog(output);
+				stdout.write(staticOutput);
 			}
 
 			this.lastOutput = output;
+			return;
 		}
+
+		if (hasStaticOutput) {
+			this.fullStaticOutput += staticOutput;
+		}
+
+		if (debug) {
+			stdout.write(this.fullStaticOutput + output);
+			return;
+		}
+
+		const isSmallViewport = stdout.rows <= outputRows
+
+		if (isSmallViewport) {
+			stdout.write(ansiEscapes.clearTerminal + this.fullStaticOutput + output);
+			this.lastOutput = output;
+			return;
+		}
+
+		if (hasStaticOutput) {
+			this.throttledLog.cancel();
+			this.log.clear();
+			stdout.write(staticOutput);
+		}
+
+		this.throttledLog(output);
+		this.lastOutput = output;
 	}
 
 	render(node) {

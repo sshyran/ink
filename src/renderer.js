@@ -125,6 +125,7 @@ export default ({terminalWidth}) => {
 
 		return {
 			output: output.get(),
+			outputRows: output.rows(),
 			staticOutput: staticOutput ? `${staticOutput.get()}\n` : undefined
 		};
 	};
